@@ -1,0 +1,132 @@
+services:
+  # === PHP / Laravel App ===
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: earthday-app
+    restart: unless-stopped
+    working_dir: /var/www
+    volumes:
+      - .:/var/www
+      - ./docker/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - earthday-network
+    healthcheck:
+      test: ["CMD", "php", "artisan", "schedule:list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # === Queue Worker ===
+  queue:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: earthday-queue
+    restart: unless-stopped
+    working_dir: /var/www
+    command: php artisan queue:work redis --sleep=3 --tries=3 --max-time=3600
+    volumes:
+      - .:/var/www
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - earthday-network
+
+  # === Scheduler (cron) ===
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: earthday-scheduler
+    restart: unless-stopped
+    working_dir: /var/www
+    command: >
+      sh -c "while true; do
+        php artisan schedule:run;
+        sleep 60;
+      done"
+    volumes:
+      - .:/var/www
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - earthday-network
+
+  # === Nginx Web Server ===
+  nginx:
+    image: nginx:alpine
+    container_name: earthday-nginx
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    volumes:
+      - .:/var/www
+      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - app
+    networks:
+      - earthday-network
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # === MySQL 8.0 ===
+  mysql:
+    image: mysql:8.0
+    container_name: earthday-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: earth_day_db
+      MYSQL_USER: earthday_user
+      MYSQL_PASSWORD: earthday_pass
+      MYSQL_ROOT_PASSWORD: root_secret_pass
+    volumes:
+      - earthday-mysql-data:/var/lib/mysql
+    ports:
+      - "3307:3306"
+    networks:
+      - earthday-network
+    command: --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+
+  # === Redis ===
+  redis:
+    image: redis:7-alpine
+    container_name: earthday-redis
+    restart: unless-stopped
+    volumes:
+      - earthday-redis-data:/data
+    ports:
+      - "6380:6379"
+    networks:
+      - earthday-network
+    command: redis-server --appendonly yes
+
+  # === Mailpit (ловушка для писем при разработке) ===
+  mailpit:
+    image: axllent/mailpit
+    container_name: earthday-mail
+    restart: unless-stopped
+    ports:
+      - "8025:8025"   # Web UI
+      - "1025:1025"   # SMTP
+    networks:
+      - earthday-network
+
+volumes:
+  earthday-mysql-data:
+  earthday-redis-data:
+
+networks:
+  earthday-network:
+    driver: bridge
