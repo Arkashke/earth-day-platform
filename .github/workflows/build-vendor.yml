@@ -8,6 +8,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
+      - run: mkdir -p bootstrap/cache storage/framework/views storage/framework/cache storage/framework/sessions storage/logs storage/app/public && chmod -R 775 bootstrap/cache storage
       - run: composer install --no-dev --ignore-platform-reqs
       - uses: actions/upload-artifact@v4
         with:
