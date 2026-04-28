@@ -40,7 +40,3 @@ earth-day-platform/
 │
 └── README.md
 ```
-## 联系方式 / Contacts
-
-Оргкомитет проекта «День Земли — каждый день!»
-📧 info@earthday.ru | 📞 +7 (495) 123-45-67
